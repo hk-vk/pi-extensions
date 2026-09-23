@@ -1,7 +1,7 @@
 {
   "name": "@diegopetrucci/pi-openai-fast",
   "version": "0.1.17",
-  "description": "A Pi extension that adds Fast mode to requests using the OpenAI or OpenAI Codex provider APIs.",
+  "description": "Enable Fast mode for OpenAI models in Pi across the openai and openai-codex providers.",
   "keywords": [
     "pi-package",
     "pi",

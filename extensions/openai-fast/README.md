@@ -1,6 +1,6 @@
 # openai-fast
 
-A Pi extension that adds Fast mode to requests using Pi's `openai` provider (`openai-responses` or `openai-completions`) and `openai-codex` provider (`openai-codex-responses`). Model IDs are not allowlisted; the Codex provider requires ChatGPT OAuth.
+Enables Fast mode for OpenAI models in Pi across its `openai` and `openai-codex` providers. It applies by provider/API, not a hardcoded model-ID list; Codex requires ChatGPT OAuth.
 
 Forked from [Diego Petrucci's pi-extensions](https://github.com/diegopetrucci/pi-extensions)—thanks for the original.
 
