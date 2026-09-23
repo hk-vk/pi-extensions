@@ -8,16 +8,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 const EXTENSION_ID = "openai-fast";
-const PROVIDER_ID = "openai-codex";
-const API_ID = "openai-codex-responses";
-const FAST_SERVICE_TIER = "priority";
-const SUPPORTED_MODELS = new Set([
-	"gpt-5.5",
-	"gpt-5.6-sol",
-	"gpt-5.6-terra",
-	"gpt-5.6-luna",
-]);
-const SUPPORTED_MODELS_LABEL = "gpt-5.5, gpt-5.6-sol, gpt-5.6-terra, or gpt-5.6-luna";
+const FAST_SERVICE_TIER = "fast";
 
 const DEFAULT_CONFIG: OpenAIFastConfig = {
 	enabled: false,
@@ -133,35 +124,22 @@ function getEligibility(ctx: ExtensionContext): Eligibility {
 	}
 
 	const key = `${model.provider}/${model.id}`;
-	if (model.provider !== PROVIDER_ID) {
+	const isCodex = model.provider === "openai-codex" && model.api === "openai-codex-responses";
+	const isOpenAI = model.provider === "openai" &&
+		(model.api === "openai-responses" || model.api === "openai-completions");
+	if (!isCodex && !isOpenAI) {
 		return {
 			eligible: false,
 			modelKey: key,
-			reason: `current provider is ${model.provider}, not ${PROVIDER_ID}`,
+			reason: "current model is not using an OpenAI API",
 		};
 	}
 
-	if (model.api !== API_ID) {
+	if (isCodex && !ctx.modelRegistry.isUsingOAuth(model)) {
 		return {
 			eligible: false,
 			modelKey: key,
-			reason: `current API is ${model.api}, not ${API_ID}`,
-		};
-	}
-
-	if (!SUPPORTED_MODELS.has(model.id)) {
-		return {
-			eligible: false,
-			modelKey: key,
-			reason: `Fast mode is only enabled for ${SUPPORTED_MODELS_LABEL}`,
-		};
-	}
-
-	if (!ctx.modelRegistry.isUsingOAuth(model)) {
-		return {
-			eligible: false,
-			modelKey: key,
-			reason: "ChatGPT OAuth auth is required; API-key auth is intentionally not used",
+			reason: "ChatGPT OAuth auth is required for OpenAI Codex models",
 		};
 	}
 
@@ -210,7 +188,7 @@ function injectFastServiceTier(
 	if (!getEligibility(ctx).eligible) return undefined;
 	if (!isPayloadRecord(payload)) return undefined;
 	if (payload.model !== ctx.model?.id) return undefined;
-	if ("service_tier" in payload) return undefined;
+	if (payload.service_tier === FAST_SERVICE_TIER) return undefined;
 
 	state.lastInjectedAt = Date.now();
 	state.lastInjectedModel = modelKey(ctx);
@@ -256,7 +234,7 @@ export default function openAIFastExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("fast", {
-		description: "Toggle OpenAI Codex Fast mode for ChatGPT-auth GPT-5.5 and GPT-5.6 Codex variants",
+		description: "Toggle Fast mode for models using OpenAI APIs",
 		getArgumentCompletions: () => null,
 		handler: async (args, ctx) => {
 			const state = getState(ctx);

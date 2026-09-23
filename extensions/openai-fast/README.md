@@ -1,28 +1,24 @@
 # openai-fast
 
-A pi extension that enables OpenAI Codex Fast mode for ChatGPT-auth GPT-5.5 and GPT-5.6 Codex variants (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`).
+A Pi extension that adds Fast mode to requests using Pi's `openai` provider (`openai-responses` or `openai-completions`) and `openai-codex` provider (`openai-codex-responses`). Model IDs are not allowlisted; the Codex provider requires ChatGPT OAuth.
+
+Forked from [Diego Petrucci's pi-extensions](https://github.com/diegopetrucci/pi-extensions)—thanks for the original.
 
 This package is standalone-only and is not auto-loaded by the `@diegopetrucci/pi-extensions` collection package. The collection uses the unified [`fast`](../fast) extension instead.
 
-When active, the extension injects this into eligible OpenAI Codex request payloads:
+When active, the extension injects this into eligible OpenAI and Codex request payloads:
 
 ```json
 {
-  "service_tier": "priority"
+  "service_tier": "fast"
 }
 ```
 
-The user-facing feature is OpenAI Codex **Fast mode**. The wire value is `priority` because current Codex clients map Fast mode to the OpenAI priority service tier.
+The user-facing feature is OpenAI **Fast mode**. The extension sends the current `service_tier: "fast"` request value.
 
 ## Eligibility
 
-Fast mode is only injected when all of these are true:
-
-- The current provider is `openai-codex`.
-- The current API is `openai-codex-responses`.
-- The current model is `gpt-5.5`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`.
-- The provider is using ChatGPT OAuth/subscription auth, not API-key auth.
-- The request payload does not already include `service_tier`.
+Fast mode is injected for any model using `openai-codex` / `openai-codex-responses` with ChatGPT OAuth, or `openai` with the Responses or Completions API. The model ID is not checked. Existing `service_tier` values are overridden while Fast mode is on.
 
 ## Commands
 
@@ -62,25 +58,13 @@ Here `<pi-config-dir>` is Pi's runtime config directory name (`CONFIG_DIR_NAME`;
 
 ## Install
 
-### Standalone npm package
+Clone this fork, then install the standalone package directory:
 
 ```bash
-pi install npm:@diegopetrucci/pi-openai-fast
+pi install /path/to/pi-extensions/extensions/openai-fast
 ```
 
-### Collection package
-
-```bash
-pi install npm:@diegopetrucci/pi-extensions
-```
-
-### GitHub package
-
-```bash
-pi install git:github.com/diegopetrucci/pi-extensions
-```
-
-Then reload pi:
+Reload pi after installation:
 
 ```text
 /reload
@@ -88,6 +72,5 @@ Then reload pi:
 
 ## Notes
 
-- This extension intentionally does not affect API-key OpenAI models.
-- Pi may only account Fast-mode cost correctly when the backend reports `service_tier: "priority"` in the streamed response. The extension does not patch usage totals to avoid double-counting.
-- If pi adds first-class service-tier support later, this extension skips payloads that already contain `service_tier`.
+- OpenAI decides which models/accounts support Fast; unsupported combinations may reject the request. Fast mode has a per-token premium, and direct OpenAI API-key requests use API billing.
+- The extension defaults to off; use `/fast` to toggle it for the session.

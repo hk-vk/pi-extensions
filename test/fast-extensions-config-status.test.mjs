@@ -9,7 +9,12 @@ import { createExtensionHarness } from './extension-test-helpers.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLAUDE_FAST_BETA = 'fast-mode-2026-02-01';
-const SUPPORTED_OPENAI_FAST_MODELS = ['gpt-5.5', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'];
+const OPENAI_MODEL_CASES = [
+  { provider: 'openai-codex', api: 'openai-codex-responses', id: 'gpt-6-luna', oauth: true },
+  { provider: 'openai-codex', api: 'openai-codex-responses', id: 'future-codex-model', oauth: true },
+  { provider: 'openai', api: 'openai-responses', id: 'gpt-4.1', oauth: false },
+  { provider: 'openai', api: 'openai-completions', id: 'future-openai-model', oauth: false },
+];
 let importCounter = 0;
 
 async function loadFreshExtension(relativePath) {
@@ -145,7 +150,7 @@ test('openai-fast honors trusted nested project config over global config and ig
   assert.deepEqual(trustedPayload, {
     model: 'gpt-5.5',
     input: 'hello',
-    service_tier: 'priority',
+    service_tier: 'fast',
   });
   assert.deepEqual(trusted.statuses.at(-1), { key: 'openai-fast', value: undefined });
 
@@ -208,15 +213,9 @@ test('openai-fast reports no-model status, hides disabled status indicators, and
   });
 });
 
-test('openai-fast supports GPT-5.6 Codex variants through config defaults and session toggles', async (t) => {
+test('openai-fast applies dynamically to OpenAI and Codex models with config and session toggles', async (t) => {
   const { agentDir, projectDir } = setupTempDirs(t);
   setAgentDirEnv(t, agentDir);
-
-  writeConfig(path.join(agentDir, 'extensions', 'openai-fast.json'), {
-    enabled: true,
-    showStatus: true,
-  });
-
   const openAIFastExtension = await loadFreshExtension('extensions/openai-fast/index.ts');
   const harness = createExtensionHarness();
   openAIFastExtension(harness.pi);
@@ -225,52 +224,45 @@ test('openai-fast supports GPT-5.6 Codex variants through config defaults and se
   const beforeProviderRequest = getHandler(harness, 'before_provider_request');
   const command = getCommand(harness, 'fast');
 
-  for (const modelId of SUPPORTED_OPENAI_FAST_MODELS) {
+  for (const { provider, api, id, oauth } of OPENAI_MODEL_CASES) {
     writeConfig(path.join(agentDir, 'extensions', 'openai-fast.json'), {
       enabled: true,
       showStatus: true,
     });
-
-    const configEnabledContext = createFastContext({
+    const context = createFastContext({
       cwd: projectDir,
-      model: { provider: 'openai-codex', api: 'openai-codex-responses', id: modelId },
+      model: { provider, api, id },
       trusted: true,
-      isUsingOAuth: true,
+      isUsingOAuth: oauth,
     });
-
-    await sessionStart({}, configEnabledContext.ctx);
-    assert.deepEqual(configEnabledContext.statuses.at(-1), { key: 'openai-fast', value: 'fast' });
+    await sessionStart({}, context.ctx);
+    assert.deepEqual(context.statuses.at(-1), { key: 'openai-fast', value: 'fast' });
     assert.deepEqual(
-      await beforeProviderRequest({ payload: { model: modelId, input: 'hello' } }, configEnabledContext.ctx),
-      { model: modelId, input: 'hello', service_tier: 'priority' },
+      await beforeProviderRequest({ payload: { model: id, input: 'hello' } }, context.ctx),
+      { model: id, input: 'hello', service_tier: 'fast' },
     );
 
     writeConfig(path.join(agentDir, 'extensions', 'openai-fast.json'), {
       enabled: false,
       showStatus: true,
     });
-
-    const commandEnabledContext = createFastContext({
+    const toggleContext = createFastContext({
       cwd: projectDir,
-      model: { provider: 'openai-codex', api: 'openai-codex-responses', id: modelId },
+      model: { provider, api, id },
       trusted: true,
-      isUsingOAuth: true,
+      isUsingOAuth: oauth,
     });
-
-    await sessionStart({}, commandEnabledContext.ctx);
-    await command.handler('', commandEnabledContext.ctx);
-    assert.equal(
-      commandEnabledContext.notifications.at(-1).message.includes(`active for openai-codex/${modelId}`),
-      true,
-    );
+    await sessionStart({}, toggleContext.ctx);
+    await command.handler('', toggleContext.ctx);
+    assert.equal(toggleContext.notifications.at(-1).message.includes(`active for ${provider}/${id}`), true);
     assert.deepEqual(
-      await beforeProviderRequest({ payload: { model: modelId, input: 'hello' } }, commandEnabledContext.ctx),
-      { model: modelId, input: 'hello', service_tier: 'priority' },
+      await beforeProviderRequest({ payload: { model: id, input: 'hello' } }, toggleContext.ctx),
+      { model: id, input: 'hello', service_tier: 'fast' },
     );
   }
 });
 
-test('openai-fast keeps rejecting unsupported providers, APIs, models, and pre-shaped payloads', async (t) => {
+test('openai-fast rejects unrelated providers and APIs and forces Fast onto OpenAI requests', async (t) => {
   const { agentDir, projectDir } = setupTempDirs(t);
   setAgentDirEnv(t, agentDir);
 
@@ -287,9 +279,9 @@ test('openai-fast keeps rejecting unsupported providers, APIs, models, and pre-s
   const beforeProviderRequest = getHandler(harness, 'before_provider_request');
   const unsupportedProviderContext = createFastContext({
     cwd: projectDir,
-    model: { provider: 'openai', api: 'openai-codex-responses', id: 'gpt-5.6-sol' },
+    model: { provider: 'opencode-go', api: 'openai-completions', id: 'gpt-5.6-sol' },
     trusted: true,
-    isUsingOAuth: true,
+    isUsingOAuth: false,
   });
 
   await sessionStart({}, unsupportedProviderContext.ctx);
@@ -311,15 +303,15 @@ test('openai-fast keeps rejecting unsupported providers, APIs, models, and pre-s
     undefined,
   );
 
-  const unsupportedModelContext = createFastContext({
+  const codexApiKeyContext = createFastContext({
     cwd: projectDir,
-    model: { provider: 'openai-codex', api: 'openai-codex-responses', id: 'gpt-5.6-orbit' },
+    model: { provider: 'openai-codex', api: 'openai-codex-responses', id: 'gpt-6-luna' },
     trusted: true,
-    isUsingOAuth: true,
+    isUsingOAuth: false,
   });
-  await sessionStart({}, unsupportedModelContext.ctx);
+  await sessionStart({}, codexApiKeyContext.ctx);
   assert.equal(
-    await beforeProviderRequest({ payload: { model: 'gpt-5.6-orbit', input: 'hello' } }, unsupportedModelContext.ctx),
+    await beforeProviderRequest({ payload: { model: 'gpt-6-luna', input: 'hello' } }, codexApiKeyContext.ctx),
     undefined,
   );
 
@@ -337,7 +329,11 @@ test('openai-fast keeps rejecting unsupported providers, APIs, models, and pre-s
   );
 
   const existingTierPayload = { model: 'gpt-5.6-luna', input: 'hello', service_tier: 'default' };
-  assert.equal(await beforeProviderRequest({ payload: existingTierPayload }, fastContext.ctx), undefined);
+  assert.deepEqual(await beforeProviderRequest({ payload: existingTierPayload }, fastContext.ctx), {
+    model: 'gpt-5.6-luna',
+    input: 'hello',
+    service_tier: 'fast',
+  });
   assert.deepEqual(existingTierPayload, {
     model: 'gpt-5.6-luna',
     input: 'hello',
@@ -514,35 +510,28 @@ test('claude-fast gates request mutation on payload shape, model match, and exis
   assert.deepEqual(readBetaHeader(model), ['existing-beta', CLAUDE_FAST_BETA]);
 });
 
-test('openai-fast treats removed model gpt-5.4 as ineligible', async (t) => {
+test('openai-fast does not hardcode model IDs', async (t) => {
   const { agentDir, projectDir } = setupTempDirs(t);
   setAgentDirEnv(t, agentDir);
-
-  writeConfig(path.join(agentDir, 'extensions', 'openai-fast.json'), {
-    enabled: true,
-    showStatus: true,
-  });
+  writeConfig(path.join(agentDir, 'extensions', 'openai-fast.json'), { enabled: true, showStatus: true });
 
   const openAIFastExtension = await loadFreshExtension('extensions/openai-fast/index.ts');
   const harness = createExtensionHarness();
   openAIFastExtension(harness.pi);
-
   const sessionStart = getHandler(harness, 'session_start');
   const beforeProviderRequest = getHandler(harness, 'before_provider_request');
-
   const context = createFastContext({
     cwd: projectDir,
-    model: { provider: 'openai-codex', api: 'openai-codex-responses', id: 'gpt-5.4' },
+    model: { provider: 'openai-codex', api: 'openai-codex-responses', id: 'unlisted-model-id' },
     trusted: true,
     isUsingOAuth: true,
   });
 
   await sessionStart({}, context.ctx);
-  assert.deepEqual(context.statuses.at(-1), { key: 'openai-fast', value: undefined });
-  assert.equal(
-    await beforeProviderRequest({ payload: { model: 'gpt-5.4', input: 'hello' } }, context.ctx),
-    undefined,
-    'gpt-5.4 must be ineligible after removal from the allowlist',
+  assert.deepEqual(context.statuses.at(-1), { key: 'openai-fast', value: 'fast' });
+  assert.deepEqual(
+    await beforeProviderRequest({ payload: { model: 'unlisted-model-id', input: 'hello' } }, context.ctx),
+    { model: 'unlisted-model-id', input: 'hello', service_tier: 'fast' },
   );
 });
 
