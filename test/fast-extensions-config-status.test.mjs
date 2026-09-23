@@ -150,7 +150,7 @@ test('openai-fast honors trusted nested project config over global config and ig
   assert.deepEqual(trustedPayload, {
     model: 'gpt-5.5',
     input: 'hello',
-    service_tier: 'fast',
+    service_tier: 'priority',
   });
   assert.deepEqual(trusted.statuses.at(-1), { key: 'openai-fast', value: undefined });
 
@@ -225,6 +225,7 @@ test('openai-fast applies dynamically to OpenAI and Codex models with config and
   const command = getCommand(harness, 'fast');
 
   for (const { provider, api, id, oauth } of OPENAI_MODEL_CASES) {
+    const serviceTier = provider === 'openai-codex' ? 'priority' : 'fast';
     writeConfig(path.join(agentDir, 'extensions', 'openai-fast.json'), {
       enabled: true,
       showStatus: true,
@@ -239,7 +240,7 @@ test('openai-fast applies dynamically to OpenAI and Codex models with config and
     assert.deepEqual(context.statuses.at(-1), { key: 'openai-fast', value: 'fast' });
     assert.deepEqual(
       await beforeProviderRequest({ payload: { model: id, input: 'hello' } }, context.ctx),
-      { model: id, input: 'hello', service_tier: 'fast' },
+      { model: id, input: 'hello', service_tier: serviceTier },
     );
 
     writeConfig(path.join(agentDir, 'extensions', 'openai-fast.json'), {
@@ -257,7 +258,7 @@ test('openai-fast applies dynamically to OpenAI and Codex models with config and
     assert.equal(toggleContext.notifications.at(-1).message.includes(`active for ${provider}/${id}`), true);
     assert.deepEqual(
       await beforeProviderRequest({ payload: { model: id, input: 'hello' } }, toggleContext.ctx),
-      { model: id, input: 'hello', service_tier: 'fast' },
+      { model: id, input: 'hello', service_tier: serviceTier },
     );
   }
 });
@@ -332,7 +333,7 @@ test('openai-fast rejects unrelated providers and APIs and forces Fast onto Open
   assert.deepEqual(await beforeProviderRequest({ payload: existingTierPayload }, fastContext.ctx), {
     model: 'gpt-5.6-luna',
     input: 'hello',
-    service_tier: 'fast',
+    service_tier: 'priority',
   });
   assert.deepEqual(existingTierPayload, {
     model: 'gpt-5.6-luna',
@@ -531,7 +532,7 @@ test('openai-fast does not hardcode model IDs', async (t) => {
   assert.deepEqual(context.statuses.at(-1), { key: 'openai-fast', value: 'fast' });
   assert.deepEqual(
     await beforeProviderRequest({ payload: { model: 'unlisted-model-id', input: 'hello' } }, context.ctx),
-    { model: 'unlisted-model-id', input: 'hello', service_tier: 'fast' },
+    { model: 'unlisted-model-id', input: 'hello', service_tier: 'priority' },
   );
 });
 

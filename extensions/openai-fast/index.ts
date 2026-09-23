@@ -8,7 +8,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 const EXTENSION_ID = "openai-fast";
-const FAST_SERVICE_TIER = "fast";
+const CODEX_SERVICE_TIER = "priority";
+const OPENAI_SERVICE_TIER = "fast";
 
 const DEFAULT_CONFIG: OpenAIFastConfig = {
 	enabled: false,
@@ -117,6 +118,10 @@ function describeMode(state: SessionState): string {
 	return state.config.enabled ? "on (config default)" : "off (config default)";
 }
 
+function serviceTierFor(ctx: ExtensionContext): string {
+	return ctx.model?.provider === "openai-codex" ? CODEX_SERVICE_TIER : OPENAI_SERVICE_TIER;
+}
+
 function getEligibility(ctx: ExtensionContext): Eligibility {
 	const model = ctx.model;
 	if (!model) {
@@ -169,7 +174,7 @@ function getStatusMessage(ctx: ExtensionContext, state: SessionState): string {
 		: "";
 
 	if (active) {
-		return `OpenAI Fast mode is ${describeMode(state)} and active for ${eligibility.modelKey}; requests will use service_tier=${FAST_SERVICE_TIER}.${injected}`;
+		return `OpenAI Fast mode is ${describeMode(state)} and active for ${eligibility.modelKey}; requests will use service_tier=${serviceTierFor(ctx)}.${injected}`;
 	}
 
 	if (enabled) {
@@ -188,13 +193,14 @@ function injectFastServiceTier(
 	if (!getEligibility(ctx).eligible) return undefined;
 	if (!isPayloadRecord(payload)) return undefined;
 	if (payload.model !== ctx.model?.id) return undefined;
-	if (payload.service_tier === FAST_SERVICE_TIER) return undefined;
+	const serviceTier = serviceTierFor(ctx);
+	if (payload.service_tier === serviceTier) return undefined;
 
 	state.lastInjectedAt = Date.now();
 	state.lastInjectedModel = modelKey(ctx);
 	return {
 		...payload,
-		service_tier: FAST_SERVICE_TIER,
+		service_tier: serviceTier,
 	};
 }
 

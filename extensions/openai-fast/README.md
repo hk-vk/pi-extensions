@@ -6,15 +6,7 @@ Forked from [Diego Petrucci's pi-extensions](https://github.com/diegopetrucci/pi
 
 This package is standalone-only and is not auto-loaded by the `@diegopetrucci/pi-extensions` collection package. The collection uses the unified [`fast`](../fast) extension instead.
 
-When active, the extension injects this into eligible OpenAI and Codex request payloads:
-
-```json
-{
-  "service_tier": "fast"
-}
-```
-
-The user-facing feature is OpenAI **Fast mode**. The extension sends the current `service_tier: "fast"` request value.
+When enabled, Codex requests use `service_tier: "priority"`; direct OpenAI requests use `service_tier: "fast"`. Both select Fast mode.
 
 ## Eligibility
 
